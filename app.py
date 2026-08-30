@@ -24,13 +24,25 @@ with st.sidebar:
 
 tokenizer, model = load_model(model_name)
 
-prompt = st.text_area("Enter your prompt", value="What is AI?", height=80)
+prompt = st.text_area("Enter your prompt", value="What is AI?", height=80, key="prompt_box")
 run = st.button("\U0001F50D Run X-Ray", type="primary")
 
-if run and prompt.strip():
+# st.button() only returns True on the exact rerun it was clicked.
+# Any OTHER widget click anywhere on the page (e.g. the "Generate" button
+# inside tab 7 below) also triggers a full script rerun, and on THAT rerun
+# `run` would be False again. Session state is what makes the results
+# survive clicks on other buttons/sliders.
+if run:
+    st.session_state["xray_ran"] = True
+    st.session_state["xray_prompt"] = prompt
+    st.session_state.pop("gen_result", None)  # clear any stale generation from a previous prompt
+
+if st.session_state.get("xray_ran"):
+    active_prompt = st.session_state["xray_prompt"]
+
     with st.spinner("Running forward pass through the model..."):
-        tokens, token_ids, encoded = tokenize_text(tokenizer, prompt)
-        inputs, outputs = run_forward_pass(tokenizer, model, prompt)
+        tokens, token_ids, encoded = tokenize_text(tokenizer, active_prompt)
+        inputs, outputs = run_forward_pass(tokenizer, model, active_prompt)
 
     tab_names = [
         "1. Tokenization", "2. Embeddings", "3. Architecture",
@@ -105,11 +117,16 @@ if run and prompt.strip():
         if st.button("\u25b6\ufe0f Generate token-by-token"):
             with st.spinner("Generating..."):
                 final_text, steps = generate_step_by_step(
-                    tokenizer, model, prompt,
+                    tokenizer, model, active_prompt,
                     max_new_tokens=max_new_tokens, temperature=temperature,
                     top_k=top_k, top_p=top_p,
                 )
-            for i, step in enumerate(steps, 1):
+            # Save so it survives reruns triggered by clicking elsewhere (e.g. other tabs' sliders)
+            st.session_state["gen_result"] = {"final_text": final_text, "steps": steps}
+
+        gen_result = st.session_state.get("gen_result")
+        if gen_result:
+            for i, step in enumerate(gen_result["steps"], 1):
                 label = f"Step {i}: + \"{step['new_token']}\""
                 with st.expander(label):
                     st.write(f"Text so far: `{step['text_so_far']}`")
@@ -117,6 +134,8 @@ if run and prompt.strip():
                     for tok, p in step["top5"]:
                         st.write(f"- `{tok}` \u2014 {p*100:.1f}%")
             st.success("Final response:")
-            st.write(final_text)
+            st.write(gen_result["final_text"])
+        else:
+            st.caption("Click the button above to generate a response one token at a time.")
 else:
     st.info("Enter a prompt above and click **Run X-Ray** to begin.")

@@ -59,7 +59,7 @@ if st.session_state.get("xray_ran"):
 
     with tabs[1]:
         st.subheader("Token Embeddings")
-        embeddings = model.get_input_embeddings()(inputs["input_ids"])[0].detach().numpy()
+        embeddings = model.get_input_embeddings()(inputs["input_ids"])[0].detach().float().numpy()
         st.write(f"Embedding dimension: **{embeddings.shape[1]}**")
         st.write("First 8 values of each token's embedding vector:")
         st.dataframe({tok: vec[:8] for tok, vec in zip(tokens, embeddings)})
@@ -88,7 +88,7 @@ if st.session_state.get("xray_ran"):
         c1, c2 = st.columns(2)
         layer_idx = c1.slider("Layer", 1, n_layers, min(6, n_layers)) - 1
         head_idx = c2.slider("Head", 1, n_heads, 1) - 1
-        attn = outputs.attentions[layer_idx][0, head_idx].detach().numpy()
+        attn = outputs.attentions[layer_idx][0, head_idx].detach().float().numpy()
         st.plotly_chart(plot_attention_heatmap(attn, tokens, layer_idx, head_idx), use_container_width=True)
         st.caption("Brighter cells = the row token 'attends' more strongly to the column token.")
 
@@ -96,7 +96,7 @@ if st.session_state.get("xray_ran"):
         st.subheader("Hidden States Across Layers")
         n_hidden = len(outputs.hidden_states)
         layer_idx = st.slider("Layer (0 = raw embeddings)", 0, n_hidden - 1, min(10, n_hidden - 1))
-        hidden = outputs.hidden_states[layer_idx][0].detach().numpy()
+        hidden = outputs.hidden_states[layer_idx][0].detach().float().numpy()
         st.write(f"Shape at this layer: `{hidden.shape}` (tokens \u00d7 hidden dimension)")
         fig = plot_embedding_pca(hidden, tokens)
         if fig:
@@ -106,7 +106,7 @@ if st.session_state.get("xray_ran"):
     with tabs[5]:
         st.subheader("Next-Token Prediction")
         st.caption("Hidden State \u2192 LM Head \u2192 Logits \u2192 Softmax \u2192 Probabilities")
-        logits = outputs.logits[0, -1, :]
+        logits = outputs.logits[0, -1, :].float()
         probs = torch.softmax(logits, dim=-1)
         top_probs, top_idx = torch.topk(probs, 8)
         top_tokens = [tokenizer.decode([i]) for i in top_idx]

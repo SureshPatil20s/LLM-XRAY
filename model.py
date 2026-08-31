@@ -2,11 +2,12 @@ import streamlit as st
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Tiny model so it fits within free-tier hosting limits (~1GB RAM).
-# Running locally on your own machine? Swap this for "Qwen/Qwen2.5-0.5B-Instruct"
-# or even "Qwen/Qwen2.5-1.5B-Instruct" (the model from the original brief) —
-# type either into the app's sidebar, no code change needed.
-DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct"
+# A small but noticeably more capable instruct model than 135M, kept inside
+# free-tier RAM (~1GB) by loading in bfloat16 (half precision) instead of
+# float32. Running locally on your own machine with no RAM limit? Swap this
+# for "Qwen/Qwen2.5-0.5B-Instruct" or "Qwen/Qwen2.5-1.5B-Instruct" (the model
+# from the original brief) by typing it into the app's sidebar — no code change needed.
+DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
 
 
 @st.cache_resource(show_spinner="Loading model (first run only, then cached)...")
@@ -14,7 +15,7 @@ def load_model(model_name: str = DEFAULT_MODEL):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float32,
+        torch_dtype=torch.bfloat16,   # half the memory footprint of float32
         attn_implementation="eager",  # needed so attention weights are actually returned
     )
     model.eval()
@@ -39,7 +40,7 @@ def generate_step_by_step(tokenizer, model, prompt, max_new_tokens=20,
 
     for _ in range(max_new_tokens):
         with torch.no_grad():
-            logits = model(input_ids).logits[0, -1, :]
+            logits = model(input_ids).logits[0, -1, :].float()  # bfloat16 -> float32
 
         scaled = logits / max(temperature, 1e-5)
 
